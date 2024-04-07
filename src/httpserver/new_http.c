@@ -634,7 +634,14 @@ int HTTP_ProcessPacket(http_request_t* request) {
 		i = strlen(request->reply);
 		return i;
 	}
-
+// Example of routing based on the request URL
+    if (strcmp(request->url, "/submit_block") == 0) {
+        // Call the function to handle block submission
+        return http_fn_submit_block(request);
+    } else if (strcmp(request->url, "/hashrate") == 0) {
+        // Call the function to report the hash rate
+        return http_fn_hashrate(request);
+    }
 	// chop URL at space
 	p = strchr(urlStr, ' ');
 	if (p != 0) {
