@@ -1,4 +1,7 @@
-
+// Insert at the top of your server code
+#include "sha256.h"  // Include your SHA256 implementation
+#include <string>
+#include <ctime>
 #include "../new_common.h"
 #include "lwip/sockets.h"
 #include "lwip/ip_addr.h"
@@ -36,6 +39,9 @@
 static void tcp_server_thread(beken_thread_arg_t arg);
 static void tcp_client_thread(beken_thread_arg_t arg);
 
+// Global variables for hash rate calculation
+volatile unsigned long long totalHashes = 0;
+volatile time_t miningStartTime = 0;
 
 xTaskHandle g_http_thread = NULL;
 
@@ -60,6 +66,50 @@ int sendfn(int fd, char* data, int len) {
 		return send(fd, data, len, 0);
 	}
 	return -1;
+}
+
+// Implementations for /submit_block and /hashrate endpoints
+int http_fn_submit_block(http_request_t* request) {
+    std::string blockTemplate = request->bodystart; // Simplified for demonstration
+    totalHashes = 0;
+    miningStartTime = std::time(nullptr);
+    uint32_t nonce = 0;
+    bool mined = false;
+
+    while (!mined) {
+        std::string candidate = blockTemplate + std::to_string(nonce);
+        std::string hash = SHA256::hash(candidate);
+        totalHashes++;
+
+        if (hash.substr(0, 4) == "0000") { // Simplified condition
+            mined = true;
+            std::string response = "Block mined successfully. Hash: " + hash;
+            sendfn(request->fd, const_cast<char*>(response.c_str()), response.length());
+            break;
+        } else {
+            nonce++;
+        }
+    }
+
+    return 0; // Success
+}
+
+int http_fn_hashrate(http_request_t* request) {
+    time_t currentTime = std::time(nullptr);
+    double secondsElapsed = std::difftime(currentTime, miningStartTime);
+    double hashRate = secondsElapsed > 0 ? totalHashes / secondsElapsed : 0;
+    char response[256];
+    snprintf(response, sizeof(response), "Current Hashrate: %f H/s", hashRate);
+    sendfn(request->fd, response, strlen(response));
+    return 0; // Success
+}
+
+// Modify your HTTP_ProcessPacket to handle new paths
+// Example modification (pseudo-code):
+if (strcmp(request->url, "/submit_block") == 0) {
+    return http_fn_submit_block(request);
+} else if (strcmp(request->url, "/hashrate") == 0) {
+    return http_fn_hashrate(request);
 }
 
 static void tcp_client_thread(beken_thread_arg_t arg)
